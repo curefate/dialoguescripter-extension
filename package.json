@@ -39,12 +39,18 @@
     ]
   },
   "devDependencies": {
-    "@types/node": "^24.2.1",
-    "@types/vscode": "^1.102.0",
-    "vscode-languageserver-textdocument": "^1.0.12"
+    "@types/node": "18.16.19",
+    "@types/vscode": "1.102.0",
+    "typescript": "4.9.5"
   },
   "dependencies": {
-    "vscode-languageclient": "^9.0.1",
-    "vscode-languageserver": "^9.0.1"
+    "vscode-languageclient": "7.0.0",
+    "vscode-languageserver": "7.0.0",
+    "vscode-languageserver-textdocument": "1.0.8"
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
   }
 }
