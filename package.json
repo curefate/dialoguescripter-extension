@@ -1,0 +1,41 @@
+{
+  "name": "dialoguescripter",
+  "displayName": "DialogueScripter",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.103.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ds",
+        "aliases": [
+          "DS script",
+          "ds"
+        ],
+        "extensions": [
+          ".ds"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ds",
+        "scopeName": "source.ds",
+        "path": "./syntaxes/ds.tmLanguage.json"
+      }
+    ],
+    "themes": [
+      {
+        "label": "DialogueScripter Theme",
+        "uiTheme": "vs-dark",
+        "path": "./themes/dialoguescripter-color-theme.json"
+      }
+    ]
+  }
+}
