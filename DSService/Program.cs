@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using Antlr4.Runtime;
 
-// dotnet publish -c Release -r win-x64 --self-contained true
+// dotnet publish -c Release -r win-x64 --self-contained false /p:PublishSingleFile=true
+// dotnet publish -c Release
 // 定义通信协议
 public class AnalysisRequest
 {
@@ -26,6 +28,7 @@ class Program
 {
     static void Main(string[] args)
     {
+        Console.Error.WriteLine("DS 分析器已启动");
         while (true)
         {
             var input = Console.ReadLine();
@@ -33,12 +36,16 @@ class Program
 
             try
             {
+                Console.Error.WriteLine("收到输入");
                 var request = JsonSerializer.Deserialize<AnalysisRequest>(input);
                 var result = AnalyzeCode(request.Code);
-                Console.WriteLine(JsonSerializer.Serialize(result));
+                var json = JsonSerializer.Serialize(result);
+                Console.Error.WriteLine($"发送响应: {json}");
+                Console.WriteLine(json);
             }
             catch (Exception ex)
             {
+                Console.Error.WriteLine($"错误: {ex}");
                 Console.WriteLine(JsonSerializer.Serialize(new
                 {
                     Error = ex.Message

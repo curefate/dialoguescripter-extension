@@ -7,7 +7,7 @@ const node_1 = require("vscode-languageclient/node");
 let client;
 function activate(context) {
     // 服务器模块路径
-    const serverModule = context.asAbsolutePath(path.join('server', 'out', 'server.js'));
+    const serverModule = context.asAbsolutePath(path.join('out', 'lsp', 'server.js'));
     // 服务器选项
     const serverOptions = {
         run: { module: serverModule, transport: node_1.TransportKind.ipc },
@@ -24,8 +24,21 @@ function activate(context) {
             fileEvents: vscode_1.workspace.createFileSystemWatcher('**/.ds')
         }
     };
+    const outputChannel = vscode_1.window.createOutputChannel('DS Language Server');
     // 创建语言客户端并启动
-    client = new node_1.LanguageClient('dsLanguageServer', 'DS Language Server', serverOptions, clientOptions);
+    client = new node_1.LanguageClient('dsLanguageServer', 'DS Language Server', serverOptions, {
+        documentSelector: [{ scheme: 'file', language: 'ds' }],
+        outputChannel: vscode_1.window.createOutputChannel('DS Debug'),
+        traceOutputChannel: vscode_1.window.createOutputChannel('DS Trace'),
+        synchronize: {
+            fileEvents: vscode_1.workspace.createFileSystemWatcher('**/.ds')
+        }
+    });
+    client.onDidChangeState(event => {
+        if (event.newState === node_1.State.Stopped) {
+            vscode_1.window.showErrorMessage('语言服务器意外停止');
+        }
+    });
     client.start();
 }
 exports.activate = activate;
