@@ -52,6 +52,7 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "build-server": "cd DSService && dotnet publish -c Release -o ../ds-service"
   }
 }

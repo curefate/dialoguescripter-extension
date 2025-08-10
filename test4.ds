@@ -1,5 +1,5 @@
 import test5.txt
 
 label a:
-    "这里是a"
+    "hello a"
 jump b

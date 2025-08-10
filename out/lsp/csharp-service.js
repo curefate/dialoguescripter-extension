@@ -15,27 +15,47 @@ class CSharpAnalysisService {
     constructor(exePath, connection) {
         this.connection = connection;
         this.process = (0, child_process_1.spawn)(exePath, [], {
-            stdio: ['pipe', 'pipe', 'inherit']
+            stdio: ['pipe', 'pipe', 'inherit'],
+            windowsVerbatimArguments: true,
+            env: Object.assign(Object.assign({}, process.env), { NODE_ENV: 'production' })
         });
         this.process.on('error', (err) => {
-            this.connection.console.error(`[DS] C# 进程错误: ${err}`);
+            this.connection.console.error(`[DS] C# process error: ${err}`);
         });
         this.process.on('exit', (code) => {
-            this.connection.console.error(`[DS] C# 进程退出，代码 ${code}`);
+            this.connection.console.error(`[DS] C# process exit, code: ${code}`);
         });
         this.process.on('close', (code) => {
-            this.connection.console.error(`[DS] C# 进程关闭，代码 ${code}`);
+            this.connection.console.error(`[DS] C# process cosed, code: ${code}`);
         });
     }
     analyze(document) {
         return __awaiter(this, void 0, void 0, function* () {
+            const code = document.getText();
+            this.connection.console.log(`[DS] Full code content (${code.length} chars):\n${code}`);
             const request = {
-                code: document.getText()
+                code: code,
+                uri: document.uri
             };
-            this.connection.console.log(`[DS] 发送分析请求: ${document.uri}`);
+            if (!request.code) {
+                this.connection.console.log('[DS] document is empty');
+                return [];
+            }
+            this.connection.console.log(`[DS] Analyzing document (length: ${request.code.length})`);
+            this.connection.console.log(`[DS] First 50 chars: ${request.code.substring(0, Math.min(50, request.code.length))}`);
+            this.connection.console.log(`[DS] send analyze request: ${document.uri}`);
             return new Promise((resolve, reject) => {
+                var _a, _b;
+                const requestStr = JSON.stringify(request) + '\n';
+                this.connection.console.log(`[DS] Sending request (${requestStr.length} bytes)`);
+                (_b = (_a = this.process) === null || _a === void 0 ? void 0 : _a.stdin) === null || _b === void 0 ? void 0 : _b.write(requestStr, (err) => {
+                    if (err) {
+                        this.connection.console.error(`[DS] Write error: ${err}`);
+                        resolve([]);
+                    }
+                });
                 const timeout = setTimeout(() => {
-                    reject(new Error('C# 分析超时'));
+                    reject(new Error('C# analysis request timed out'));
                 }, 5000);
                 let responseData = '';
                 this.process.stdout.on('data', (data) => {
@@ -44,9 +64,9 @@ class CSharpAnalysisService {
                     try {
                         const result = JSON.parse(responseData);
                         clearTimeout(timeout);
-                        this.connection.console.log(`[DS] 解析到 ${((_a = result.Diagnostics) === null || _a === void 0 ? void 0 : _a.length) || 0} 个诊断`);
+                        this.connection.console.log(`[DS] parse ${((_a = result.Diagnostics) === null || _a === void 0 ? void 0 : _a.length) || 0} diagnostics`);
                         if (result.Error) {
-                            this.connection.console.error(`[DS] 分析错误: ${result.Error}`);
+                            this.connection.console.error(`[DS] analysis error: ${result.Error}`);
                             reject(new Error(result.Error));
                         }
                         else {
@@ -61,7 +81,7 @@ class CSharpAnalysisService {
                                         character: Math.max(d.Column >= 0 ? d.Column : 0, 0) + 1
                                     }
                                 },
-                                message: d.Message || '未知错误',
+                                message: d.Message || 'unknown error',
                                 source: 'ds',
                                 severity: 1
                             })));

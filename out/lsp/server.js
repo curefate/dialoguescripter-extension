@@ -17,16 +17,16 @@ const connection = (0, node_1.createConnection)(node_1.ProposedFeatures.all);
 const documents = new node_1.TextDocuments(vscode_languageserver_textdocument_1.TextDocument);
 // 添加未捕获异常处理
 process.on('uncaughtException', (error) => {
-    connection.console.error(`[Server] 未捕获异常: ${error.stack}`);
+    connection.console.error(`[Server] uncaught exception: ${error.stack}`);
 });
 // 添加未处理的Promise拒绝
 process.on('unhandledRejection', (reason, promise) => {
-    connection.console.error(`[Server] 未处理的拒绝: ${reason}`);
+    connection.console.error(`[Server] unhandled rejection: ${reason}`);
 });
 // 初始化 C# 分析服务
 const csharpService = new csharp_service_1.CSharpAnalysisService(path.join(__dirname, '../../ds-service/DSService.exe'), connection);
 connection.onInitialize((params) => {
-    connection.console.log('服务器初始化成功');
+    connection.console.log('server initialized');
     return {
         capabilities: {
             textDocumentSync: node_1.TextDocumentSyncKind.Incremental
@@ -35,14 +35,14 @@ connection.onInitialize((params) => {
 });
 // 核心分析逻辑
 documents.onDidChangeContent((change) => __awaiter(void 0, void 0, void 0, function* () {
-    connection.console.log(`[DS] 文档变更: ${change.document.uri}`);
+    connection.console.log(`[DS] document changed: ${change.document.uri}`);
     try {
         const diagnostics = yield csharpService.analyze(change.document);
-        connection.console.log(`[DS] 收到 ${diagnostics.length} 个诊断信息`);
+        connection.console.log(`[DS] recieve ${diagnostics.length} diagnostics`);
         connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
     }
     catch (error) {
-        connection.console.error(`[DS] C# 分析错误: ${error}`);
+        connection.console.error(`[DS] C# analyze error: ${error}`);
     }
 }));
 connection.listen();

@@ -36,7 +36,7 @@ function activate(context) {
     });
     client.onDidChangeState(event => {
         if (event.newState === node_1.State.Stopped) {
-            vscode_1.window.showErrorMessage('语言服务器意外停止');
+            vscode_1.window.showErrorMessage('DS Language Server stopped unexpectedly.');
         }
     });
     client.start();

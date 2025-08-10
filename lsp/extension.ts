@@ -53,7 +53,7 @@ export function activate(context: ExtensionContext) {
 
     client.onDidChangeState(event => {
         if (event.newState === State.Stopped) {
-            window.showErrorMessage('语言服务器意外停止');
+            window.showErrorMessage('DS Language Server stopped unexpectedly.');
         }
     });
 
