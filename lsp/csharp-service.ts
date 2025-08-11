@@ -11,7 +11,8 @@ export class CSharpAnalysisService {
         this.process = spawn(exePath, [], {
             stdio: ['pipe', 'pipe', 'inherit'],
             windowsVerbatimArguments: true,
-            env: { ...process.env, NODE_ENV: 'production' }
+            env: { ...process.env, NODE_ENV: 'production' },
+            windowsHide: true
         });
 
         this.process.on('error', (err) => {
@@ -23,30 +24,25 @@ export class CSharpAnalysisService {
         });
 
         this.process.on('close', (code) => {
-            this.connection.console.error(`[DS] C# process cosed, code: ${code}`);
+            this.connection.console.error(`[DS] C# process closed, code: ${code}`);
         });
     }
 
     async analyze(document: TextDocument): Promise<Diagnostic[]> {
         const code = document.getText();
-        this.connection.console.log(`[DS] Full code content (${code.length} chars):\n${code}`);
         const request = {
             code: code,
-            uri: document.uri
         };
 
+        this.connection.console.log(`Analyzing code (length: ${code.length})`);
+
         if (!request.code) {
-            this.connection.console.log('[DS] document is empty');
             return [];
         }
 
-        this.connection.console.log(`[DS] Analyzing document (length: ${request.code.length})`);
-        this.connection.console.log(`[DS] First 50 chars: ${request.code.substring(0, Math.min(50, request.code.length))}`);
-
-        this.connection.console.log(`[DS] send analyze request: ${document.uri}`);
-
         return new Promise((resolve, reject) => {
             const requestStr = JSON.stringify(request) + '\n';
+            
             this.connection.console.log(`[DS] Sending request (${requestStr.length} bytes)`);
 
             this.process?.stdin?.write(requestStr, (err) => {
@@ -55,18 +51,12 @@ export class CSharpAnalysisService {
                     resolve([]);
                 }
             });
-            const timeout = setTimeout(() => {
-                reject(new Error('C# analysis request timed out'));
-            }, 5000);
 
             let responseData = '';
             this.process.stdout!.on('data', (data) => {
                 responseData += data.toString();
                 try {
                     const result = JSON.parse(responseData);
-                    clearTimeout(timeout);
-                    this.connection.console.log(`[DS] parse ${result.Diagnostics?.length || 0} diagnostics`);
-
                     if (result.Error) {
                         this.connection.console.error(`[DS] analysis error: ${result.Error}`);
                         reject(new Error(result.Error));
@@ -87,13 +77,11 @@ export class CSharpAnalysisService {
                             severity: 1
                         })));
                     }
-                    responseData = ''; // 重置为下次请求准备
+                    responseData = '';
                 } catch {
-                    // JSON 不完整，等待更多数据
+                    // wait for more data
                 }
             });
-
-            this.process.stdin!.write(JSON.stringify(request) + '\n');
         });
     }
 }

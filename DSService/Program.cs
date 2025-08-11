@@ -5,9 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Antlr4.Runtime;
 
-// dotnet publish -c Release -r win-x64 --self-contained false /p:PublishSingleFile=true
-// dotnet publish -c Release
-// 定义通信协议
 public class AnalysisRequest
 {
     [JsonPropertyName("code")]
@@ -30,7 +27,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.Error.WriteLine("DS analyzer started");
+        Console.Error.WriteLine("[DS Service] C# process started");
         while (true)
         {
             try
@@ -38,7 +35,6 @@ class Program
                 var input = Console.ReadLine();
                 if (string.IsNullOrEmpty(input))
                 {
-                    Console.Error.WriteLine("Warning: Received empty input");
                     Console.WriteLine(JsonSerializer.Serialize(new AnalysisResult
                     {
                         Diagnostics = Array.Empty<Diagnostic>()
@@ -46,39 +42,27 @@ class Program
                     continue;
                 }
 
-                Console.Error.WriteLine($"Received input: {input.Length} chars");
+                Console.Error.WriteLine($"[DS Service] Received input: {input.Length} chars");
 
                 var request = JsonSerializer.Deserialize<AnalysisRequest>(input);
-                if (request == null || request.Code == null)
+                if (request?.Code == null)
                 {
-                    Console.Error.WriteLine("Error: Invalid request format");
+                    Console.Error.WriteLine("[DS Service] Error: Invalid request format");
                     Console.WriteLine(JsonSerializer.Serialize(new
                     {
-                        Error = "Invalid request format: code cannot be null"
+                        Error = "[DS Service] Invalid request format: code cannot be null"
                     }));
                     continue;
                 }
 
                 var result = AnalyzeCode(request.Code);
-                var json = JsonSerializer.Serialize(result);
-                Console.WriteLine(json);
-            }
-            catch (JsonException jex)
-            {
-                Console.Error.WriteLine($"JSON error: {jex.Message}");
-                Console.WriteLine(JsonSerializer.Serialize(new
-                {
-                    Error = $"Invalid JSON: {jex.Message}",
-                    StackTrace = jex.StackTrace
-                }));
+                Console.WriteLine(JsonSerializer.Serialize(result));
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Unexpected error: {ex}");
                 Console.WriteLine(JsonSerializer.Serialize(new
                 {
-                    Error = $"Unexpected error: {ex.Message}",
-                    StackTrace = ex.StackTrace
+                    Error = $"[DS Service] Unexpected error: {ex.Message}"
                 }));
             }
         }
@@ -86,41 +70,22 @@ class Program
 
     static AnalysisResult AnalyzeCode(string code)
     {
-        Console.Error.WriteLine($"Analyzing code (length: {code.Length})");
+        Console.Error.WriteLine($"[DS Service] Analyzing code (length: {code.Length})");
 
         var inputStream = new AntlrInputStream(code);
         var lexer = new DSLexer(inputStream);
         var tokens = new CommonTokenStream(lexer);
-
-        // 打印所有token用于调试
-        tokens.Fill();
-        Console.Error.WriteLine($"Total tokens: {tokens.Size}");
-        for (int i = 0; i < tokens.Size; i++)
-        {
-            var token = tokens.Get(i);
-            Console.Error.WriteLine($"Token {i}: {token.Text} (Type: {token.Type}, Line: {token.Line}, Column: {token.Column})");
-        }
 
         var parser = new DSParser(tokens);
         parser.RemoveErrorListeners();
         var errorListener = new DSErrorListener();
         parser.AddErrorListener(errorListener);
 
-        var tree = parser.program(); // 获取解析树
-
-        // 打印解析树结构
-        Console.Error.WriteLine($"Parse tree: {tree.ToStringTree(parser)}");
-
-        // 打印收集到的错误
-        Console.Error.WriteLine($"Found {errorListener.Diagnostics.Count} errors");
-        foreach (var error in errorListener.Diagnostics)
-        {
-            Console.Error.WriteLine($"Error at {error.Line}:{error.Column} - {error.Message}");
-        }
+        parser.program();
 
         return new AnalysisResult
         {
-            Diagnostics = errorListener.Diagnostics.ToArray()
+            Diagnostics = [.. errorListener.Diagnostics]
         };
     }
 }
@@ -133,11 +98,9 @@ class DSErrorListener : BaseErrorListener
         IToken offendingSymbol, int line, int charPositionInLine,
         string msg, RecognitionException e)
     {
-        Console.Error.WriteLine($"Syntax error detected! Line: {line}, Pos: {charPositionInLine}, Msg: {msg}");
-
         Diagnostics.Add(new Diagnostic
         {
-            Line = line - 1,  // 转换为0-based
+            Line = line - 1,
             Column = charPositionInLine,
             Message = msg
         });

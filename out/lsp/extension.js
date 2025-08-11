@@ -6,47 +6,32 @@ const vscode_1 = require("vscode");
 const node_1 = require("vscode-languageclient/node");
 let client;
 function activate(context) {
-    // 服务器模块路径
-    const serverModule = context.asAbsolutePath(path.join('out', 'lsp', 'server.js'));
-    // 服务器选项
+    const serverModulePath = context.asAbsolutePath(path.join('out', 'lsp', 'server.js'));
     const serverOptions = {
-        run: { module: serverModule, transport: node_1.TransportKind.ipc },
+        run: { module: serverModulePath, transport: node_1.TransportKind.ipc },
         debug: {
-            module: serverModule,
+            module: serverModulePath,
             transport: node_1.TransportKind.ipc,
             options: { execArgv: ['--nolazy', '--inspect=6009'] }
         }
     };
-    // 客户端选项
     const clientOptions = {
         documentSelector: [{ scheme: 'file', language: 'ds' }],
         synchronize: {
             fileEvents: vscode_1.workspace.createFileSystemWatcher('**/.ds')
         }
     };
-    const outputChannel = vscode_1.window.createOutputChannel('DS Language Server');
-    // 创建语言客户端并启动
-    client = new node_1.LanguageClient('dsLanguageServer', 'DS Language Server', serverOptions, {
-        documentSelector: [{ scheme: 'file', language: 'ds' }],
-        outputChannel: vscode_1.window.createOutputChannel('DS Debug'),
-        traceOutputChannel: vscode_1.window.createOutputChannel('DS Trace'),
-        synchronize: {
-            fileEvents: vscode_1.workspace.createFileSystemWatcher('**/.ds')
-        }
-    });
+    client = new node_1.LanguageClient('dsLanguageServer', 'DS Language Server', serverOptions, clientOptions);
     client.onDidChangeState(event => {
         if (event.newState === node_1.State.Stopped) {
-            vscode_1.window.showErrorMessage('DS Language Server stopped unexpectedly.');
+            vscode_1.window.showErrorMessage('[DS] Language Server stopped unexpectedly.');
         }
     });
     client.start();
 }
 exports.activate = activate;
 function deactivate() {
-    if (!client) {
-        return undefined;
-    }
-    return client.stop();
+    return client ? client.stop() : undefined;
 }
 exports.deactivate = deactivate;
 //# sourceMappingURL=extension.js.map

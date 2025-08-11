@@ -11,22 +11,19 @@ import {
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
-    // 服务器模块路径
-    const serverModule = context.asAbsolutePath(
+    const serverModulePath = context.asAbsolutePath(
         path.join('out', 'lsp', 'server.js')
     );
 
-    // 服务器选项
     const serverOptions: ServerOptions = {
-        run: { module: serverModule, transport: TransportKind.ipc },
+        run: { module: serverModulePath, transport: TransportKind.ipc },
         debug: {
-            module: serverModule,
+            module: serverModulePath,
             transport: TransportKind.ipc,
             options: { execArgv: ['--nolazy', '--inspect=6009'] }
         }
     };
 
-    // 客户端选项
     const clientOptions: LanguageClientOptions = {
         documentSelector: [{ scheme: 'file', language: 'ds' }],
         synchronize: {
@@ -34,26 +31,16 @@ export function activate(context: ExtensionContext) {
         }
     };
 
-    const outputChannel = window.createOutputChannel('DS Language Server');
-
-    // 创建语言客户端并启动
     client = new LanguageClient(
         'dsLanguageServer',
         'DS Language Server',
         serverOptions,
-        {
-            documentSelector: [{ scheme: 'file', language: 'ds' }],
-            outputChannel: window.createOutputChannel('DS Debug'),
-            traceOutputChannel: window.createOutputChannel('DS Trace'),
-            synchronize: {
-                fileEvents: workspace.createFileSystemWatcher('**/.ds')
-            }
-        }
+        clientOptions
     );
 
     client.onDidChangeState(event => {
         if (event.newState === State.Stopped) {
-            window.showErrorMessage('DS Language Server stopped unexpectedly.');
+            window.showErrorMessage('[DS] Language Server stopped unexpectedly.');
         }
     });
 
@@ -61,8 +48,5 @@ export function activate(context: ExtensionContext) {
 }
 
 export function deactivate(): Thenable<void> | undefined {
-    if (!client) {
-        return undefined;
-    }
-    return client.stop();
+    return client ? client.stop() : undefined;
 }
