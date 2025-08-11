@@ -14,17 +14,14 @@ import * as path from 'path';
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
-process.on('uncaughtException', (error) => {
-    connection.console.error(`[DS Server] Server uncaught exception: ${error.stack}`);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    connection.console.error(`[DS Server] Server unhandled rejection: ${reason}`);
-});
+const ANALYSIS_DEBOUNCE_MS = 300;
+let analysisTimeout: NodeJS.Timeout | null = null;
 
 const csharpService = new CSharpAnalysisService(
     path.join(__dirname, '../../ds-service/DSService.exe'),
-    connection
+    connection,
+    1000, // restartDelayMs
+    10000 // requestTimeoutMs
 );
 
 connection.onInitialize((params: InitializeParams) => {
@@ -36,15 +33,20 @@ connection.onInitialize((params: InitializeParams) => {
     };
 });
 
-documents.onDidChangeContent(async (change) => {
-    connection.console.log(`[DS Server] document changed: ${change.document.uri}`);
-    try {
-        const diagnostics = await csharpService.analyze(change.document);
-        connection.console.log(`[DS Server] recieve ${diagnostics.length} diagnostics`);
-        connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
-    } catch (error) {
-        connection.console.error(`[DS Server] C# analyze error: ${error}`);
+documents.onDidChangeContent((change) => {
+    if (analysisTimeout) {
+        clearTimeout(analysisTimeout);
     }
+
+    analysisTimeout = setTimeout(async () => {
+        try {
+            connection.console.log(`[DS Server] Analyzing: ${change.document.uri}`);
+            const diagnostics = await csharpService.analyze(change.document);
+            connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
+        } catch (error) {
+            connection.console.error(`[DS Server] Analysis failed: ${error}`);
+        }
+    }, ANALYSIS_DEBOUNCE_MS);
 });
 
 connection.listen();

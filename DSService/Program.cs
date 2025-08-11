@@ -43,11 +43,10 @@ class Program
                 }
 
                 Console.Error.WriteLine($"[DS Service] Received input: {input.Length} chars");
-
                 var request = JsonSerializer.Deserialize<AnalysisRequest>(input);
+
                 if (request?.Code == null)
                 {
-                    Console.Error.WriteLine("[DS Service] Error: Invalid request format");
                     Console.WriteLine(JsonSerializer.Serialize(new
                     {
                         Error = "[DS Service] Invalid request format: code cannot be null"
@@ -55,8 +54,17 @@ class Program
                     continue;
                 }
 
+                if (request.Code.Length > 10_000)
+                {
+                    Console.WriteLine(JsonSerializer.Serialize(new
+                    {
+                        Error = "[DS Service] Code length exceeds 10,000 characters limit"
+                    }));
+                    continue;
+                }
+
                 var result = AnalyzeCode(request.Code);
-                Console.WriteLine(JsonSerializer.Serialize(result));
+                Console.WriteLine(JsonSerializer.Serialize(result) + "\n");
             }
             catch (Exception ex)
             {

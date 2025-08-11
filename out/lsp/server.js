@@ -15,13 +15,11 @@ const csharp_service_1 = require("./csharp-service");
 const path = require("path");
 const connection = (0, node_1.createConnection)(node_1.ProposedFeatures.all);
 const documents = new node_1.TextDocuments(vscode_languageserver_textdocument_1.TextDocument);
-process.on('uncaughtException', (error) => {
-    connection.console.error(`[DS Server] Server uncaught exception: ${error.stack}`);
-});
-process.on('unhandledRejection', (reason, promise) => {
-    connection.console.error(`[DS Server] Server unhandled rejection: ${reason}`);
-});
-const csharpService = new csharp_service_1.CSharpAnalysisService(path.join(__dirname, '../../ds-service/DSService.exe'), connection);
+const ANALYSIS_DEBOUNCE_MS = 300;
+let analysisTimeout = null;
+const csharpService = new csharp_service_1.CSharpAnalysisService(path.join(__dirname, '../../ds-service/DSService.exe'), connection, 1000, // restartDelayMs
+10000 // requestTimeoutMs
+);
 connection.onInitialize((params) => {
     connection.console.log('[DS Server] Server initialized');
     return {
@@ -30,17 +28,21 @@ connection.onInitialize((params) => {
         }
     };
 });
-documents.onDidChangeContent((change) => __awaiter(void 0, void 0, void 0, function* () {
-    connection.console.log(`[DS Server] document changed: ${change.document.uri}`);
-    try {
-        const diagnostics = yield csharpService.analyze(change.document);
-        connection.console.log(`[DS Server] recieve ${diagnostics.length} diagnostics`);
-        connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
+documents.onDidChangeContent((change) => {
+    if (analysisTimeout) {
+        clearTimeout(analysisTimeout);
     }
-    catch (error) {
-        connection.console.error(`[DS Server] C# analyze error: ${error}`);
-    }
-}));
+    analysisTimeout = setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
+        try {
+            connection.console.log(`[DS Server] Analyzing: ${change.document.uri}`);
+            const diagnostics = yield csharpService.analyze(change.document);
+            connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
+        }
+        catch (error) {
+            connection.console.error(`[DS Server] Analysis failed: ${error}`);
+        }
+    }), ANALYSIS_DEBOUNCE_MS);
+});
 connection.listen();
 documents.listen(connection);
 //# sourceMappingURL=server.js.map

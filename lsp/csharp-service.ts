@@ -3,85 +3,139 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Diagnostic, Connection } from 'vscode-languageserver';
 
 export class CSharpAnalysisService {
-    private process: ChildProcess;
-    private connection: Connection;
+    private process: ChildProcess | null = null;
+    private restartAttempts = 0;
+    private readonly maxRestartAttempts = 5;
+    private activeRequests: Map<string, { resolve: (diags: Diagnostic[]) => void, reject: (err: Error) => void }> = new Map();
+    private buffer = '';
 
-    constructor(exePath: string, connection: Connection) {
-        this.connection = connection;
-        this.process = spawn(exePath, [], {
+    constructor(
+        private readonly exePath: string,
+        private readonly connection: Connection,
+        private readonly restartDelayMs = 1000,
+        private readonly requestTimeoutMs = 10000
+    ) {
+        this.spawnProcess();
+    }
+
+    private spawnProcess(): void {
+        this.process = spawn(this.exePath, [], {
             stdio: ['pipe', 'pipe', 'inherit'],
             windowsVerbatimArguments: true,
             env: { ...process.env, NODE_ENV: 'production' },
             windowsHide: true
         });
 
-        this.process.on('error', (err) => {
-            this.connection.console.error(`[DS] C# process error: ${err}`);
+        this.connection.console.log(`[DS] C# process started (PID: ${this.process.pid})`);
+
+        this.process.stdout?.on('data', (data: Buffer) => {
+            this.buffer += data.toString();
+            const lines = this.buffer.split('\n');
+            
+            if (lines.length > 1) {
+                this.buffer = lines.pop()!;
+                for (const line of lines) {
+                    if (line.trim() === '') continue;
+                    try {
+                        const result = JSON.parse(line);
+                        if (result.Error) {
+                            this.connection.console.error(`[DS] Analysis error: ${result.Error}`);
+                            this.clearRequests(new Error(result.Error));
+                        } else {
+                            this.resolveRequests(this.mapDiagnostics(result.Diagnostics));
+                        }
+                    } catch (err) {
+                        this.connection.console.error(`[DS] JSON parse error: ${err}, data: ${line}`);
+                    }
+                }
+            }
         });
 
         this.process.on('exit', (code) => {
-            this.connection.console.error(`[DS] C# process exit, code: ${code}`);
+            this.connection.console.error(`[DS] C# process exited, code: ${code}`);
+            this.scheduleRestart();
         });
 
-        this.process.on('close', (code) => {
-            this.connection.console.error(`[DS] C# process closed, code: ${code}`);
+        this.process.on('error', (err) => {
+            this.connection.console.error(`[DS] C# process error: ${err}`);
+            this.scheduleRestart();
         });
     }
 
-    async analyze(document: TextDocument): Promise<Diagnostic[]> {
+    private resolveRequests(diagnostics: Diagnostic[]): void {
+        this.activeRequests.forEach(({ resolve }) => resolve(diagnostics));
+        this.activeRequests.clear();
+    }
+
+    private clearRequests(error: Error): void {
+        this.activeRequests.forEach(({ reject }) => reject(error));
+        this.activeRequests.clear();
+    }
+
+    private scheduleRestart(): void {
+        if (this.restartAttempts >= this.maxRestartAttempts) {
+            this.connection.console.error('[DS] Max restart attempts reached. Giving up.');
+            this.clearRequests(new Error('C# process unavailable'));
+            return;
+        }
+
+        this.restartAttempts++;
+        setTimeout(() => {
+            this.connection.console.log(`[DS] Restarting C# process (attempt ${this.restartAttempts})`);
+            this.spawnProcess();
+        }, this.restartDelayMs);
+    }
+
+    public async analyze(document: TextDocument): Promise<Diagnostic[]> {
+        const requestId = Date.now().toString();
         const code = document.getText();
-        const request = {
-            code: code,
-        };
 
-        this.connection.console.log(`Analyzing code (length: ${code.length})`);
-
-        if (!request.code) {
+        if (!code) {
             return [];
         }
 
         return new Promise((resolve, reject) => {
-            const requestStr = JSON.stringify(request) + '\n';
-            
-            this.connection.console.log(`[DS] Sending request (${requestStr.length} bytes)`);
+            const timeout = setTimeout(() => {
+                this.activeRequests.delete(requestId);
+                reject(new Error('Analysis timeout'));
+            }, this.requestTimeoutMs);
 
-            this.process?.stdin?.write(requestStr, (err) => {
+            this.activeRequests.set(requestId, {
+                resolve: (diags) => {
+                    clearTimeout(timeout);
+                    resolve(diags);
+                },
+                reject: (err) => {
+                    clearTimeout(timeout);
+                    reject(err);
+                }
+            });
+
+            const requestStr = JSON.stringify({ code }) + '\n';
+            const canWrite = this.process?.stdin?.write(requestStr, (err) => {
                 if (err) {
-                    this.connection.console.error(`[DS] Write error: ${err}`);
-                    resolve([]);
+                    this.activeRequests.delete(requestId);
+                    reject(err);
                 }
             });
 
-            let responseData = '';
-            this.process.stdout!.on('data', (data) => {
-                responseData += data.toString();
-                try {
-                    const result = JSON.parse(responseData);
-                    if (result.Error) {
-                        this.connection.console.error(`[DS] analysis error: ${result.Error}`);
-                        reject(new Error(result.Error));
-                    } else {
-                        resolve(result.Diagnostics.map((d: any) => ({
-                            range: {
-                                start: {
-                                    line: d.Line >= 0 ? d.Line : 0,
-                                    character: d.Column >= 0 ? d.Column : 0
-                                },
-                                end: {
-                                    line: d.Line >= 0 ? d.Line : 0,
-                                    character: Math.max(d.Column >= 0 ? d.Column : 0, 0) + 1
-                                }
-                            },
-                            message: d.Message || 'unknown error',
-                            source: 'ds',
-                            severity: 1
-                        })));
-                    }
-                    responseData = '';
-                } catch {
-                    // wait for more data
-                }
-            });
+            if (!canWrite) {
+                this.process?.stdin?.once('drain', () => {
+                    this.connection.console.log('[DS] stdin drained, resuming');
+                });
+            }
         });
+    }
+
+    private mapDiagnostics(diags: any[]): Diagnostic[] {
+        return diags.map(d => ({
+            range: {
+                start: { line: d.Line >= 0 ? d.Line : 0, character: d.Column >= 0 ? d.Column : 0 },
+                end: { line: d.Line >= 0 ? d.Line : 0, character: Math.max(d.Column >= 0 ? d.Column : 0, 0) + 1 }
+            },
+            message: d.Message || 'unknown error',
+            source: 'ds',
+            severity: 1
+        }));
     }
 }
