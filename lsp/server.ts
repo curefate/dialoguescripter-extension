@@ -14,7 +14,7 @@ import * as path from 'path';
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
-const ANALYSIS_DEBOUNCE_MS = 300;
+const ANALYSIS_DEBOUNCE_MS = 500;
 let analysisTimeout: NodeJS.Timeout | null = null;
 
 const csharpService = new CSharpAnalysisService(
@@ -47,6 +47,11 @@ documents.onDidChangeContent((change) => {
             connection.console.error(`[DS Server] Analysis failed: ${error}`);
         }
     }, ANALYSIS_DEBOUNCE_MS);
+});
+
+documents.onDidClose((event) => {
+    connection.console.log(`[DS Server] Document closed: ${event.document.uri}`);
+    connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] }); // Clear diagnostics
 });
 
 connection.listen();

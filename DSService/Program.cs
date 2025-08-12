@@ -25,6 +25,8 @@ public class Diagnostic
 
 class Program
 {
+    private static int MAX_CODE_LENGTH = 100_000;
+
     static void Main(string[] args)
     {
         Console.Error.WriteLine("[DS Service] C# process started");
@@ -54,7 +56,7 @@ class Program
                     continue;
                 }
 
-                if (request.Code.Length > 10_000)
+                if (request.Code.Length > MAX_CODE_LENGTH)
                 {
                     Console.WriteLine(JsonSerializer.Serialize(new
                     {

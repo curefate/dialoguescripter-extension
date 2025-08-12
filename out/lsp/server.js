@@ -15,7 +15,7 @@ const csharp_service_1 = require("./csharp-service");
 const path = require("path");
 const connection = (0, node_1.createConnection)(node_1.ProposedFeatures.all);
 const documents = new node_1.TextDocuments(vscode_languageserver_textdocument_1.TextDocument);
-const ANALYSIS_DEBOUNCE_MS = 300;
+const ANALYSIS_DEBOUNCE_MS = 500;
 let analysisTimeout = null;
 const csharpService = new csharp_service_1.CSharpAnalysisService(path.join(__dirname, '../../ds-service/DSService.exe'), connection, 1000, // restartDelayMs
 10000 // requestTimeoutMs
@@ -42,6 +42,10 @@ documents.onDidChangeContent((change) => {
             connection.console.error(`[DS Server] Analysis failed: ${error}`);
         }
     }), ANALYSIS_DEBOUNCE_MS);
+});
+documents.onDidClose((event) => {
+    connection.console.log(`[DS Server] Document closed: ${event.document.uri}`);
+    connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] }); // Clear diagnostics
 });
 connection.listen();
 documents.listen(connection);
