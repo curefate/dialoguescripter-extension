@@ -40,7 +40,7 @@ class Program
                             var filePath = root.GetProperty("filePath").GetString();
                             var content = root.GetProperty("content").GetString();
                             if (filePath != null) _fileCache[filePath] = content ?? "";
-                            Console.Error.WriteLine($"[DS C#] Opened file: {filePath}, content length: {content?.Length}");
+                            Console.Error.WriteLine($"[DS C#] Opened file: {filePath}");
                             break;
                         }
                     case "update":
@@ -52,13 +52,11 @@ class Program
                                 if (!_fileCache.TryGetValue(filePath, out var text))
                                     text = File.Exists(filePath) ? File.ReadAllText(filePath) : string.Empty;
 
-                                // ⚠️ 简化：这里直接全量替换为最后一个 change.text
-                                // TODO: 应用真正的 range patch
+                                // TODO range patch
                                 text = changes.GetString() ?? text;
-
                                 _fileCache[filePath] = text;
                             }
-                            Console.Error.WriteLine($"[DS C#] Updated file: {filePath}, new content length: {_fileCache[filePath]?.Length}");
+                            Console.Error.WriteLine($"[DS C#] Updated file: {filePath}");
                             break;
                         }
                     case "closeFile":
@@ -98,8 +96,6 @@ class Program
 
     static AnalysisResult AnalyzeCode(string code)
     {
-        Console.Error.WriteLine($"[DS C#] Analyzing code (length: {code.Length})");
-
         var inputStream = new AntlrInputStream(code);
         var lexer = new DSLexer(inputStream);
         var tokens = new CommonTokenStream(lexer);

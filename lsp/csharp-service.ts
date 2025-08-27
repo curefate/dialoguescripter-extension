@@ -137,27 +137,14 @@ export class CSharpAnalysisService {
         }));
     }
 
-    /* private getOpenFiles(): Record<string, string> {
-        const openFiles: Record<string, string> = {};
-        for (const doc of this.documents.all()) {
-            if (doc.languageId === 'ds') {
-                const path = URI.parse(doc.uri).fsPath;
-                openFiles[path] = doc.getText();
-            }
-        }
-        return openFiles;
-    } */
-
-    // TODO
     public sendUpdate(
         document: TextDocument,
-        //changes: { range: Range; text: string; }[]
     ): void {
         const filePath = URI.parse(document.uri).fsPath;
         const payload = {
             type: 'update',
             filePath,
-            changes: document.getText(), //changes
+            changes: document.getText(),
         };
         this.process?.stdin?.write(JSON.stringify(payload) + '\n', (err) => {
             if (err) {

@@ -52,14 +52,30 @@ documents.onDidChangeContent((change) => {
 });
 
 documents.onDidOpen((event) => {
-    csharpService.sendOpenFile(event.document);
     connection.console.log(`[DS Server] Document opened: ${event.document.uri}`);
+    csharpService.sendOpenFile(event.document);
 });
 
 documents.onDidClose((event) => {
+    connection.console.log(`[DS Server] Document closed: ${event.document.uri}`);
     csharpService.sendCloseFile(event.document);
     connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] }); // Clear diagnostics
-    connection.console.log(`[DS Server] Document closed: ${event.document.uri}`);
+});
+
+documents.onDidSave((event) => {
+    connection.console.log(`[DS Server] Document saved: ${event.document.uri}`);
+    if (timer) {
+        clearTimeout(timer);
+    }
+    timer = setTimeout(async () => {
+        try {
+            connection.console.log(`[DS Server] Analyzing: ${event.document.uri}`);
+            const diagnostics = await csharpService.analyze(event.document);
+            connection.sendDiagnostics({ uri: event.document.uri, diagnostics });
+        } catch (error) {
+            connection.console.error(`[DS Server] Analysis failed: ${error}`);
+        }
+    }, 1);
 });
 
 connection.listen();

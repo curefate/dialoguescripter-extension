@@ -133,24 +133,13 @@ class CSharpAnalysisService {
             severity: 1
         }));
     }
-    /* private getOpenFiles(): Record<string, string> {
-        const openFiles: Record<string, string> = {};
-        for (const doc of this.documents.all()) {
-            if (doc.languageId === 'ds') {
-                const path = URI.parse(doc.uri).fsPath;
-                openFiles[path] = doc.getText();
-            }
-        }
-        return openFiles;
-    } */
-    // TODO
     sendUpdate(document) {
         var _a, _b;
         const filePath = vscode_uri_1.URI.parse(document.uri).fsPath;
         const payload = {
             type: 'update',
             filePath,
-            changes: document.getText(), //changes
+            changes: document.getText(),
         };
         (_b = (_a = this.process) === null || _a === void 0 ? void 0 : _a.stdin) === null || _b === void 0 ? void 0 : _b.write(JSON.stringify(payload) + '\n', (err) => {
             if (err) {

@@ -3,4 +3,3 @@ import test5.txt
 label a:
     "hello a"
 jump b
-asdf

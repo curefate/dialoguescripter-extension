@@ -21,4 +21,3 @@ label B:
 "Aloha~ here is label B, let's use some functions!"
 "{$hello}! Don't {"forget"} you can embed function in dialogue! Like this! {call Add($a, $b)}"
 call Print($hello)
-sadfsadf
