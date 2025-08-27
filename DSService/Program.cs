@@ -5,12 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Antlr4.Runtime;
 
-public class AnalysisRequest
-{
-    [JsonPropertyName("code")]
-    public string Code { get; set; } = string.Empty;
-}
-
 public class AnalysisResult
 {
     public Diagnostic[] Diagnostics { get; set; }
@@ -25,54 +19,78 @@ public class Diagnostic
 
 class Program
 {
-    private static int MAX_CODE_LENGTH = 100_000;
+    static readonly Dictionary<string, string> _fileCache = [];
 
     static void Main(string[] args)
     {
-        Console.Error.WriteLine("[DS Service] C# process started");
-        while (true)
+        Console.Error.WriteLine("[DS C#] C# process started");
+        string input;
+        while (!string.IsNullOrEmpty(input = Console.ReadLine()))
         {
             try
             {
-                var input = Console.ReadLine();
-                if (string.IsNullOrEmpty(input))
+                using var doc = JsonDocument.Parse(input);
+                var root = doc.RootElement;
+                var type = root.GetProperty("type").GetString();
+
+                switch (type)
                 {
-                    Console.WriteLine(JsonSerializer.Serialize(new AnalysisResult
-                    {
-                        Diagnostics = Array.Empty<Diagnostic>()
-                    }));
-                    continue;
+                    case "openFile":
+                        {
+                            var filePath = root.GetProperty("filePath").GetString();
+                            var content = root.GetProperty("content").GetString();
+                            if (filePath != null) _fileCache[filePath] = content ?? "";
+                            Console.Error.WriteLine($"[DS C#] Opened file: {filePath}, content length: {content?.Length}");
+                            break;
+                        }
+                    case "update":
+                        {
+                            var filePath = root.GetProperty("filePath").GetString();
+                            var changes = root.GetProperty("changes");
+                            if (filePath != null)
+                            {
+                                if (!_fileCache.TryGetValue(filePath, out var text))
+                                    text = File.Exists(filePath) ? File.ReadAllText(filePath) : string.Empty;
+
+                                // ⚠️ 简化：这里直接全量替换为最后一个 change.text
+                                // TODO: 应用真正的 range patch
+                                text = changes.GetString() ?? text;
+
+                                _fileCache[filePath] = text;
+                            }
+                            Console.Error.WriteLine($"[DS C#] Updated file: {filePath}, new content length: {_fileCache[filePath]?.Length}");
+                            break;
+                        }
+                    case "closeFile":
+                        {
+                            var filePath = root.GetProperty("filePath").GetString();
+                            if (filePath != null) _fileCache.Remove(filePath);
+                            Console.Error.WriteLine($"[DS C#] Closed file: {filePath}");
+                            break;
+                        }
+                    case "analyze":
+                        {
+                            var id = root.GetProperty("id").GetString();
+                            var filePath = root.GetProperty("filePath").GetString();
+
+                            if (filePath == null) break;
+
+                            if (!_fileCache.TryGetValue(filePath, out var code))
+                                code = File.Exists(filePath) ? File.ReadAllText(filePath) : string.Empty;
+
+                            Console.Error.WriteLine($"[DS C#] Analyzing file: {filePath}");
+
+                            var result = AnalyzeCode(code);
+                            Console.WriteLine(JsonSerializer.Serialize(result));
+                            break;
+                        }
                 }
-
-                Console.Error.WriteLine($"[DS Service] Received input: {input.Length} chars");
-                var request = JsonSerializer.Deserialize<AnalysisRequest>(input);
-
-                if (request?.Code == null)
-                {
-                    Console.WriteLine(JsonSerializer.Serialize(new
-                    {
-                        Error = "[DS Service] Invalid request format: code cannot be null"
-                    }));
-                    continue;
-                }
-
-                if (request.Code.Length > MAX_CODE_LENGTH)
-                {
-                    Console.WriteLine(JsonSerializer.Serialize(new
-                    {
-                        Error = "[DS Service] Code length exceeds 10,000 characters limit"
-                    }));
-                    continue;
-                }
-
-                var result = AnalyzeCode(request.Code);
-                Console.WriteLine(JsonSerializer.Serialize(result) + "\n");
             }
             catch (Exception ex)
             {
                 Console.WriteLine(JsonSerializer.Serialize(new
                 {
-                    Error = $"[DS Service] Unexpected error: {ex.Message}"
+                    Error = $"[DS C#] Unexpected error: {ex.Message}"
                 }));
             }
         }
@@ -80,7 +98,7 @@ class Program
 
     static AnalysisResult AnalyzeCode(string code)
     {
-        Console.Error.WriteLine($"[DS Service] Analyzing code (length: {code.Length})");
+        Console.Error.WriteLine($"[DS C#] Analyzing code (length: {code.Length})");
 
         var inputStream = new AntlrInputStream(code);
         var lexer = new DSLexer(inputStream);

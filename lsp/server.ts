@@ -15,11 +15,12 @@ const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
 const ANALYSIS_DEBOUNCE_MS = 500;
-let analysisTimeout: NodeJS.Timeout | null = null;
+let timer: NodeJS.Timeout | null = null;
 
 const csharpService = new CSharpAnalysisService(
     path.join(__dirname, '../../ds-service/DSService.exe'),
     connection,
+    documents,
     1000, // restartDelayMs
     10000 // requestTimeoutMs
 );
@@ -34,11 +35,12 @@ connection.onInitialize((params: InitializeParams) => {
 });
 
 documents.onDidChangeContent((change) => {
-    if (analysisTimeout) {
-        clearTimeout(analysisTimeout);
-    }
+    csharpService.sendUpdate(change.document);
 
-    analysisTimeout = setTimeout(async () => {
+    if (timer) {
+        clearTimeout(timer);
+    }
+    timer = setTimeout(async () => {
         try {
             connection.console.log(`[DS Server] Analyzing: ${change.document.uri}`);
             const diagnostics = await csharpService.analyze(change.document);
@@ -49,9 +51,15 @@ documents.onDidChangeContent((change) => {
     }, ANALYSIS_DEBOUNCE_MS);
 });
 
+documents.onDidOpen((event) => {
+    csharpService.sendOpenFile(event.document);
+    connection.console.log(`[DS Server] Document opened: ${event.document.uri}`);
+});
+
 documents.onDidClose((event) => {
-    connection.console.log(`[DS Server] Document closed: ${event.document.uri}`);
+    csharpService.sendCloseFile(event.document);
     connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] }); // Clear diagnostics
+    connection.console.log(`[DS Server] Document closed: ${event.document.uri}`);
 });
 
 connection.listen();

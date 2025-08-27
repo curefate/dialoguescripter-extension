@@ -1,6 +1,8 @@
 import { ChildProcess, spawn } from 'child_process';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Diagnostic, Connection } from 'vscode-languageserver';
+import { URI } from 'vscode-uri';
+import { json } from 'stream/consumers';
 
 export class CSharpAnalysisService {
     private process: ChildProcess | null = null;
@@ -12,6 +14,7 @@ export class CSharpAnalysisService {
     constructor(
         private readonly exePath: string,
         private readonly connection: Connection,
+        private readonly documents: { all: () => TextDocument[] },
         private readonly restartDelayMs = 1000,
         private readonly requestTimeoutMs = 10000
     ) {
@@ -31,7 +34,7 @@ export class CSharpAnalysisService {
         this.process.stdout?.on('data', (data: Buffer) => {
             this.buffer += data.toString();
             const lines = this.buffer.split('\n');
-            
+
             if (lines.length > 1) {
                 this.buffer = lines.pop()!;
                 for (const line of lines) {
@@ -51,8 +54,8 @@ export class CSharpAnalysisService {
             }
         });
 
-        this.process.on('exit', (code) => {
-            this.connection.console.error(`[DS] C# process exited, code: ${code}`);
+        this.process.on('exit', (err) => {
+            this.connection.console.error(`[DS] C# process exited, error: ${err}`);
             this.scheduleRestart();
         });
 
@@ -88,11 +91,6 @@ export class CSharpAnalysisService {
 
     public async analyze(document: TextDocument): Promise<Diagnostic[]> {
         const requestId = Date.now().toString();
-        const code = document.getText();
-
-        if (!code) {
-            return [];
-        }
 
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
@@ -111,19 +109,19 @@ export class CSharpAnalysisService {
                 }
             });
 
-            const requestStr = JSON.stringify({ code }) + '\n';
-            const canWrite = this.process?.stdin?.write(requestStr, (err) => {
+            const filePath = URI.parse(document.uri).fsPath;
+            const payload = {
+                type: 'analyze',
+                id: requestId,
+                filePath,
+            };
+
+            this.process?.stdin?.write(JSON.stringify(payload) + '\n', (err) => {
                 if (err) {
                     this.activeRequests.delete(requestId);
                     reject(err);
                 }
             });
-
-            if (!canWrite) {
-                this.process?.stdin?.once('drain', () => {
-                    this.connection.console.log('[DS] stdin drained, resuming');
-                });
-            }
         });
     }
 
@@ -137,5 +135,61 @@ export class CSharpAnalysisService {
             source: 'ds',
             severity: 1
         }));
+    }
+
+    /* private getOpenFiles(): Record<string, string> {
+        const openFiles: Record<string, string> = {};
+        for (const doc of this.documents.all()) {
+            if (doc.languageId === 'ds') {
+                const path = URI.parse(doc.uri).fsPath;
+                openFiles[path] = doc.getText();
+            }
+        }
+        return openFiles;
+    } */
+
+    // TODO
+    public sendUpdate(
+        document: TextDocument,
+        //changes: { range: Range; text: string; }[]
+    ): void {
+        const filePath = URI.parse(document.uri).fsPath;
+        const payload = {
+            type: 'update',
+            filePath,
+            changes: document.getText(), //changes
+        };
+        this.process?.stdin?.write(JSON.stringify(payload) + '\n', (err) => {
+            if (err) {
+                this.connection.console.error(`[DS] Failed to send incremental update: ${err}`);
+            }
+        });
+    }
+
+    public sendOpenFile(document: TextDocument): void {
+        const filePath = URI.parse(document.uri).fsPath;
+        const payload = {
+            type: 'openFile',
+            filePath,
+            content: document.getText(),
+        };
+        this.process?.stdin?.write(JSON.stringify(payload) + '\n', (err) => {
+            if (err) {
+                this.connection.console.error(`[DS] Failed to send open file: ${err}`);
+            }
+        });
+    }
+
+    public sendCloseFile(document: TextDocument): void {
+        const filePath = URI.parse(document.uri).fsPath;
+        const payload = {
+            type: 'closeFile',
+            filePath,
+        };
+        this.process?.stdin?.write(JSON.stringify(payload) + '\n', (err) => {
+            if (err) {
+                this.connection.console.error(`[DS] Failed to send close file: ${err}`);
+            }
+        });
     }
 }

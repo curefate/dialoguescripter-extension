@@ -11,10 +11,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CSharpAnalysisService = void 0;
 const child_process_1 = require("child_process");
+const vscode_uri_1 = require("vscode-uri");
 class CSharpAnalysisService {
-    constructor(exePath, connection, restartDelayMs = 1000, requestTimeoutMs = 10000) {
+    constructor(exePath, connection, documents, restartDelayMs = 1000, requestTimeoutMs = 10000) {
         this.exePath = exePath;
         this.connection = connection;
+        this.documents = documents;
         this.restartDelayMs = restartDelayMs;
         this.requestTimeoutMs = requestTimeoutMs;
         this.process = null;
@@ -57,8 +59,8 @@ class CSharpAnalysisService {
                 }
             }
         });
-        this.process.on('exit', (code) => {
-            this.connection.console.error(`[DS] C# process exited, code: ${code}`);
+        this.process.on('exit', (err) => {
+            this.connection.console.error(`[DS] C# process exited, error: ${err}`);
             this.scheduleRestart();
         });
         this.process.on('error', (err) => {
@@ -89,12 +91,8 @@ class CSharpAnalysisService {
     analyze(document) {
         return __awaiter(this, void 0, void 0, function* () {
             const requestId = Date.now().toString();
-            const code = document.getText();
-            if (!code) {
-                return [];
-            }
             return new Promise((resolve, reject) => {
-                var _a, _b, _c, _d;
+                var _a, _b;
                 const timeout = setTimeout(() => {
                     this.activeRequests.delete(requestId);
                     reject(new Error('Analysis timeout'));
@@ -109,18 +107,18 @@ class CSharpAnalysisService {
                         reject(err);
                     }
                 });
-                const requestStr = JSON.stringify({ code }) + '\n';
-                const canWrite = (_b = (_a = this.process) === null || _a === void 0 ? void 0 : _a.stdin) === null || _b === void 0 ? void 0 : _b.write(requestStr, (err) => {
+                const filePath = vscode_uri_1.URI.parse(document.uri).fsPath;
+                const payload = {
+                    type: 'analyze',
+                    id: requestId,
+                    filePath,
+                };
+                (_b = (_a = this.process) === null || _a === void 0 ? void 0 : _a.stdin) === null || _b === void 0 ? void 0 : _b.write(JSON.stringify(payload) + '\n', (err) => {
                     if (err) {
                         this.activeRequests.delete(requestId);
                         reject(err);
                     }
                 });
-                if (!canWrite) {
-                    (_d = (_c = this.process) === null || _c === void 0 ? void 0 : _c.stdin) === null || _d === void 0 ? void 0 : _d.once('drain', () => {
-                        this.connection.console.log('[DS] stdin drained, resuming');
-                    });
-                }
             });
         });
     }
@@ -134,6 +132,58 @@ class CSharpAnalysisService {
             source: 'ds',
             severity: 1
         }));
+    }
+    /* private getOpenFiles(): Record<string, string> {
+        const openFiles: Record<string, string> = {};
+        for (const doc of this.documents.all()) {
+            if (doc.languageId === 'ds') {
+                const path = URI.parse(doc.uri).fsPath;
+                openFiles[path] = doc.getText();
+            }
+        }
+        return openFiles;
+    } */
+    // TODO
+    sendUpdate(document) {
+        var _a, _b;
+        const filePath = vscode_uri_1.URI.parse(document.uri).fsPath;
+        const payload = {
+            type: 'update',
+            filePath,
+            changes: document.getText(), //changes
+        };
+        (_b = (_a = this.process) === null || _a === void 0 ? void 0 : _a.stdin) === null || _b === void 0 ? void 0 : _b.write(JSON.stringify(payload) + '\n', (err) => {
+            if (err) {
+                this.connection.console.error(`[DS] Failed to send incremental update: ${err}`);
+            }
+        });
+    }
+    sendOpenFile(document) {
+        var _a, _b;
+        const filePath = vscode_uri_1.URI.parse(document.uri).fsPath;
+        const payload = {
+            type: 'openFile',
+            filePath,
+            content: document.getText(),
+        };
+        (_b = (_a = this.process) === null || _a === void 0 ? void 0 : _a.stdin) === null || _b === void 0 ? void 0 : _b.write(JSON.stringify(payload) + '\n', (err) => {
+            if (err) {
+                this.connection.console.error(`[DS] Failed to send open file: ${err}`);
+            }
+        });
+    }
+    sendCloseFile(document) {
+        var _a, _b;
+        const filePath = vscode_uri_1.URI.parse(document.uri).fsPath;
+        const payload = {
+            type: 'closeFile',
+            filePath,
+        };
+        (_b = (_a = this.process) === null || _a === void 0 ? void 0 : _a.stdin) === null || _b === void 0 ? void 0 : _b.write(JSON.stringify(payload) + '\n', (err) => {
+            if (err) {
+                this.connection.console.error(`[DS] Failed to send close file: ${err}`);
+            }
+        });
     }
 }
 exports.CSharpAnalysisService = CSharpAnalysisService;
