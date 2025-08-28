@@ -4,6 +4,8 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Antlr4.Runtime;
+using Antlr4.Runtime.Misc;
+using Antlr4.Runtime.Tree;
 
 public class AnalysisResult
 {
@@ -78,8 +80,13 @@ class Program
 
                             Console.Error.WriteLine($"[DS C#] Analyzing file: {filePath}");
 
-                            var result = AnalyzeCode(code);
+                            var result = AnalyzeCode(code, filePath);
                             Console.WriteLine(JsonSerializer.Serialize(result));
+                            break;
+                        }
+                    case "define":
+                        {
+                            // TODO 发送跳转请求给lsp
                             break;
                         }
                 }
@@ -94,27 +101,35 @@ class Program
         }
     }
 
-    static AnalysisResult AnalyzeCode(string code)
+    static AnalysisResult AnalyzeCode(string code, string filePath)
     {
         var inputStream = new AntlrInputStream(code);
         var lexer = new DSLexer(inputStream);
         var tokens = new CommonTokenStream(lexer);
-
         var parser = new DSParser(tokens);
         parser.RemoveErrorListeners();
         var errorListener = new DSErrorListener();
         parser.AddErrorListener(errorListener);
+        var tree = parser.program();
+        var diagList = new List<Diagnostic>(errorListener.Diagnostics);
 
-        parser.program();
+        /*
+        核心思想：
+            先导入
+            检查jump和tour的label是否存在。需要visitor中处理
+            检查使用的变量是否存在定义。需要visitor中处理assign语句和variable
+            Visior中只收集，不对比
+            全收集，然后在这里对比
+        */
 
         return new AnalysisResult
         {
-            Diagnostics = [.. errorListener.Diagnostics]
+            Diagnostics = [.. diagList]
         };
     }
 }
 
-class DSErrorListener : BaseErrorListener
+internal class DSErrorListener : BaseErrorListener
 {
     public List<Diagnostic> Diagnostics { get; } = new List<Diagnostic>();
 
@@ -129,4 +144,54 @@ class DSErrorListener : BaseErrorListener
             Message = msg
         });
     }
+}
+
+internal class VisitorChecker : DSParserBaseVisitor<object>
+{
+    public HashSet<string> DefinedLabels = [];
+    public Dictionary<string, (int, int)> DefinedLabelPositions = [];
+    public HashSet<string> ReferencedLabels = [];
+    public Dictionary<string, List<(int, int)>> ReferencedLabelPositions = [];
+    public HashSet<string> DefinedVariables = [];
+    public Dictionary<string, (int, int)> DefinedVariablePositions = [];
+    public HashSet<string> ReferencedVariables = [];
+    public Dictionary<string, List<(int, int)>> ReferencedVariablePositions = [];
+    private string _currentLabel = string.Empty;
+
+    public override object Visit(IParseTree tree)
+    {
+        DefinedLabels.Clear();
+        ReferencedLabels.Clear();
+        DefinedVariables.Clear();
+        ReferencedVariables.Clear();
+        return null;
+    }
+
+    public override object VisitLabel_block([NotNull] DSParser.Label_blockContext context)
+    {
+        var label = context.label.Text;
+        DefinedLabels.Add(label);
+        DefinedLabelPositions[label] = (context.Start.Line - 1, context.label.Column);
+        _currentLabel = label;
+        return null;
+    }
+
+    public override object VisitJump_stmt([NotNull] DSParser.Jump_stmtContext context)
+    {
+        var label = context.label.Text;
+        ReferencedLabels.Add(label);
+        ReferencedLabelPositions.TryAdd(label, []);
+        ReferencedLabelPositions[label].Add((context.Start.Line - 1, context.label.Column));
+        return null;
+    }
+
+    public override object VisitTour_stmt([NotNull] DSParser.Tour_stmtContext context)
+    {
+        ReferencedLabels.Add(context.label.Text);
+        ReferencedLabelPositions.TryAdd(context.label.Text, []);
+        ReferencedLabelPositions[context.label.Text].Add((context.Start.Line - 1, context.label.Column));
+        return null;
+    }
+
+    // TODO
 }
