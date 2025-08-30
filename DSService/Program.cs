@@ -42,7 +42,7 @@ class Program
                             var filePath = root.GetProperty("filePath").GetString();
                             var content = root.GetProperty("content").GetString();
                             if (filePath != null) _fileCache[filePath] = content ?? "";
-                            Console.Error.WriteLine($"[DS C#] Opened file: {filePath}");
+                            // Console.Error.WriteLine($"[DS C#] Opened file: {filePath}");
                             break;
                         }
                     case "update":
@@ -58,14 +58,14 @@ class Program
                                 text = changes.GetString() ?? text;
                                 _fileCache[filePath] = text;
                             }
-                            Console.Error.WriteLine($"[DS C#] Updated file: {filePath}");
+                            // Console.Error.WriteLine($"[DS C#] Updated file: {filePath}");
                             break;
                         }
                     case "closeFile":
                         {
                             var filePath = root.GetProperty("filePath").GetString();
                             if (filePath != null) _fileCache.Remove(filePath);
-                            Console.Error.WriteLine($"[DS C#] Closed file: {filePath}");
+                            // Console.Error.WriteLine($"[DS C#] Closed file: {filePath}");
                             break;
                         }
                     case "analyze":
@@ -78,7 +78,7 @@ class Program
                             if (!_fileCache.TryGetValue(filePath, out var code))
                                 code = File.Exists(filePath) ? File.ReadAllText(filePath) : string.Empty;
 
-                            Console.Error.WriteLine($"[DS C#] Analyzing file: {filePath}");
+                            Console.Error.WriteLine($"[DS C#] Analyzing file: {filePath}({code.Length} chars)");
 
                             var result = AnalyzeCode(code, filePath);
                             Console.WriteLine(JsonSerializer.Serialize(result));
@@ -113,14 +113,38 @@ class Program
         var tree = parser.program();
         var diagList = new List<Diagnostic>(errorListener.Diagnostics);
 
-        /*
-        核心思想：
-            先导入
-            检查jump和tour的label是否存在。需要visitor中处理
-            检查使用的变量是否存在定义。需要visitor中处理assign语句和variable
-            Visior中只收集，不对比
-            全收集，然后在这里对比
-        */
+        var visitor = new VisitorChecker();
+        visitor.Visit(tree);
+        foreach (var label in visitor.ReferencedLabels)
+        {
+            if (!visitor.DefinedLabels.Contains(label))
+            {
+                foreach (var pos in visitor.ReferencedLabelPositions[label])
+                {
+                    diagList.Add(new Diagnostic
+                    {
+                        Line = pos.Item1,
+                        Column = pos.Item2,
+                        Message = $"Label '{label}' not found."
+                    });
+                }
+            }
+        }
+        foreach (var variable in visitor.ReferencedVariables)
+        {
+            if (!visitor.DefinedVariables.Contains(variable))
+            {
+                foreach (var pos in visitor.ReferencedVariablePositions[variable])
+                {
+                    diagList.Add(new Diagnostic
+                    {
+                        Line = pos.Item1,
+                        Column = pos.Item2,
+                        Message = $"Variable '{variable}' not found."
+                    });
+                }
+            }
+        }
 
         return new AnalysisResult
         {
@@ -161,10 +185,15 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
     public override object Visit(IParseTree tree)
     {
         DefinedLabels.Clear();
+        DefinedLabelPositions.Clear();
         ReferencedLabels.Clear();
+        ReferencedLabelPositions.Clear();
         DefinedVariables.Clear();
+        DefinedVariablePositions.Clear();
         ReferencedVariables.Clear();
-        return null;
+        ReferencedVariablePositions.Clear();
+        _currentLabel = string.Empty;
+        return base.Visit(tree);
     }
 
     public override object VisitLabel_block([NotNull] DSParser.Label_blockContext context)
@@ -173,7 +202,7 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
         DefinedLabels.Add(label);
         DefinedLabelPositions[label] = (context.Start.Line - 1, context.label.Column);
         _currentLabel = label;
-        return null;
+        return base.VisitLabel_block(context);
     }
 
     public override object VisitJump_stmt([NotNull] DSParser.Jump_stmtContext context)
@@ -182,7 +211,7 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
         ReferencedLabels.Add(label);
         ReferencedLabelPositions.TryAdd(label, []);
         ReferencedLabelPositions[label].Add((context.Start.Line - 1, context.label.Column));
-        return null;
+        return base.VisitJump_stmt(context);
     }
 
     public override object VisitTour_stmt([NotNull] DSParser.Tour_stmtContext context)
@@ -190,8 +219,34 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
         ReferencedLabels.Add(context.label.Text);
         ReferencedLabelPositions.TryAdd(context.label.Text, []);
         ReferencedLabelPositions[context.label.Text].Add((context.Start.Line - 1, context.label.Column));
-        return null;
+        return base.VisitTour_stmt(context);
     }
 
-    // TODO
+    public override object VisitAssign_stmt([NotNull] DSParser.Assign_stmtContext context)
+    {
+        var varName = context.VARIABLE().GetText();
+        if (!varName.Contains('.'))
+        {
+            varName = varName.Insert(1, _currentLabel + ".");
+        }
+        DefinedVariables.Add(varName);
+        DefinedVariablePositions[varName] = (context.Start.Line - 1, context.VARIABLE().Symbol.Column);
+        return base.VisitAssign_stmt(context);
+    }
+
+    public override object VisitExpr_primary([NotNull] DSParser.Expr_primaryContext context)
+    {
+        if (context.VARIABLE() != null)
+        {
+            var varName = context.VARIABLE().GetText();
+            if (!varName.Contains('.'))
+            {
+                varName = varName.Insert(1, _currentLabel + ".");
+            }
+            ReferencedVariables.Add(varName);
+            ReferencedVariablePositions.TryAdd(varName, []);
+            ReferencedVariablePositions[varName].Add((context.Start.Line - 1, context.VARIABLE().Symbol.Column));
+        }
+        return base.VisitExpr_primary(context);
+    }
 }

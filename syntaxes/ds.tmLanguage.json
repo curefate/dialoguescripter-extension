@@ -1,18 +1,40 @@
 {
     "scopeName": "source.ds",
-    "fileTypes": [".ds"],
+    "fileTypes": [
+        ".ds"
+    ],
     "name": "DialogueScripter",
     "patterns": [
-        {"include": "#keywords"},
-        {"include": "#import-paths"},
-        {"include": "#label-names"},
-        {"include": "#speaker-names"},
-        {"include": "#tags"},
-        {"include": "#operators"},
-        {"include": "#literals"},
-        {"include": "#strings"},
-        {"include": "#comments"},
-        {"include": "#call-functions"}
+        {
+            "include": "#keywords"
+        },
+        {
+            "include": "#import-paths"
+        },
+        {
+            "include": "#label-names"
+        },
+        {
+            "include": "#speaker-names"
+        },
+        {
+            "include": "#tags"
+        },
+        {
+            "include": "#operators"
+        },
+        {
+            "include": "#literals"
+        },
+        {
+            "include": "#strings"
+        },
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#call-functions"
+        }
     ],
     "repository": {
         "keywords": {
@@ -50,8 +72,8 @@
         "tags": {
             "patterns": [
                 {
-                "name": "entity.name.tag.ds",
-                "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+                    "name": "entity.name.tag.ds",
+                    "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
                 }
             ]
         },
@@ -83,7 +105,7 @@
                 },
                 {
                     "name": "variable.other.ds",
-                    "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*"
+                    "match": "\\$([a-zA-Z_][a-zA-Z0-9_]*.)?[a-zA-Z_][a-zA-Z0-9_]*"
                 }
             ]
         },
@@ -113,18 +135,34 @@
                                     "begin": "\\b(call)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\(",
                                     "end": "\\)",
                                     "beginCaptures": {
-                                        "1": { "name": "keyword.control.ds" },
-                                        "2": { "name": "entity.name.function.embedded.ds" }
+                                        "1": {
+                                            "name": "keyword.control.ds"
+                                        },
+                                        "2": {
+                                            "name": "entity.name.function.embedded.ds"
+                                        }
                                     },
                                     "patterns": [
-                                        {"include": "#keywords"},
-                                        {"include": "#operators"},
-                                        {"include": "#literals"}
+                                        {
+                                            "include": "#keywords"
+                                        },
+                                        {
+                                            "include": "#operators"
+                                        },
+                                        {
+                                            "include": "#literals"
+                                        }
                                     ]
                                 },
-                                {"include": "#keywords"},
-                                {"include": "#operators"},
-                                {"include": "#literals"}
+                                {
+                                    "include": "#keywords"
+                                },
+                                {
+                                    "include": "#operators"
+                                },
+                                {
+                                    "include": "#literals"
+                                }
                             ]
                         }
                     ]
