@@ -24,12 +24,36 @@ connection.onInitialize((params) => {
     connection.console.log('[DS Server] Server initialized');
     return {
         capabilities: {
-            textDocumentSync: node_1.TextDocumentSyncKind.Incremental
+            textDocumentSync: node_1.TextDocumentSyncKind.Incremental,
+            definitionProvider: true,
         }
     };
 });
+/* connection.onDefinition(async (params) => {
+    const uri = params.textDocument.uri;
+    const doc = documents.get(uri);
+    if (!doc) return null;
+
+    const filePath = URI.parse(uri).fsPath;
+
+    const res = await csharpService.getDefinition({
+        filePath,
+        position: params.position
+    });
+
+    if (!res || !res.start || !res.end || !res.filePath) return null;
+
+    const targetUri = URI.file(res.filePath).toString();
+    return Location.create(
+        targetUri,
+        Range.create(
+            Position.create(res.start.line, res.start.character),
+            Position.create(res.end.line, res.end.character)
+        )
+    );
+}); */
 documents.onDidChangeContent((change) => {
-    csharpService.sendUpdate(change.document);
+    csharpService.onUpdate(change.document);
     if (timer) {
         clearTimeout(timer);
     }
@@ -46,11 +70,21 @@ documents.onDidChangeContent((change) => {
 });
 documents.onDidOpen((event) => {
     connection.console.log(`[DS Server] Document opened: ${event.document.uri}`);
-    csharpService.sendOpenFile(event.document);
+    csharpService.onOpenFile(event.document);
+    timer = setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
+        try {
+            connection.console.log(`[DS Server] Analyzing: ${event.document.uri}`);
+            const diagnostics = yield csharpService.analyze(event.document);
+            connection.sendDiagnostics({ uri: event.document.uri, diagnostics });
+        }
+        catch (error) {
+            connection.console.error(`[DS Server] Analysis failed: ${error}`);
+        }
+    }), 1);
 });
 documents.onDidClose((event) => {
     connection.console.log(`[DS Server] Document closed: ${event.document.uri}`);
-    csharpService.sendCloseFile(event.document);
+    csharpService.onCloseFile(event.document);
     connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] }); // Clear diagnostics
 });
 documents.onDidSave((event) => {

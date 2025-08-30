@@ -133,7 +133,7 @@ class CSharpAnalysisService {
             severity: 1
         }));
     }
-    sendUpdate(document) {
+    onUpdate(document) {
         var _a, _b;
         const filePath = vscode_uri_1.URI.parse(document.uri).fsPath;
         const payload = {
@@ -147,7 +147,7 @@ class CSharpAnalysisService {
             }
         });
     }
-    sendOpenFile(document) {
+    onOpenFile(document) {
         var _a, _b;
         const filePath = vscode_uri_1.URI.parse(document.uri).fsPath;
         const payload = {
@@ -161,7 +161,7 @@ class CSharpAnalysisService {
             }
         });
     }
-    sendCloseFile(document) {
+    onCloseFile(document) {
         var _a, _b;
         const filePath = vscode_uri_1.URI.parse(document.uri).fsPath;
         const payload = {

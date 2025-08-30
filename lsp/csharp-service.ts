@@ -137,7 +137,7 @@ export class CSharpAnalysisService {
         }));
     }
 
-    public sendUpdate(
+    public onUpdate(
         document: TextDocument,
     ): void {
         const filePath = URI.parse(document.uri).fsPath;
@@ -153,7 +153,7 @@ export class CSharpAnalysisService {
         });
     }
 
-    public sendOpenFile(document: TextDocument): void {
+    public onOpenFile(document: TextDocument): void {
         const filePath = URI.parse(document.uri).fsPath;
         const payload = {
             type: 'openFile',
@@ -167,7 +167,7 @@ export class CSharpAnalysisService {
         });
     }
 
-    public sendCloseFile(document: TextDocument): void {
+    public onCloseFile(document: TextDocument): void {
         const filePath = URI.parse(document.uri).fsPath;
         const payload = {
             type: 'closeFile',
