@@ -6,4 +6,19 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
-- Initial release
+## [v0.0.1] - 2025.9.1
+
+- Initial release !
+
+### Add
+
+- Syntax highlighting
+- LSP server error check, based on antlr error listener and visitor
+- Definition jumping
+- Sync of opened documents
+
+### Todo
+
+- Patch update
+- Reference list
+- auto complication

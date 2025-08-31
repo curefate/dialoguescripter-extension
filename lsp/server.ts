@@ -15,6 +15,23 @@ import { CSharpAnalysisService } from './csharp-service';
 import * as path from 'path';
 import { URI } from 'vscode-uri';
 
+function getBackendPath(): string {
+    const base = path.join(__dirname, "../../ds-service");
+
+    if (process.platform === "win32") {
+        return path.join(base, "win-x64", "DSService.exe");
+    } else if (process.platform === "linux") {
+        return path.join(base, "linux-x64", "DSService");
+    } else if (process.platform === "darwin") {
+        if (process.arch === "arm64") {
+            return path.join(base, "osx-arm64", "DSService");
+        } else {
+            return path.join(base, "osx-x64", "DSService");
+        }
+    }
+    throw new Error(`Unsupported platform: ${process.platform} ${process.arch}`);
+}
+
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
@@ -22,7 +39,7 @@ const ANALYSIS_DEBOUNCE_MS = 500;
 let timer: NodeJS.Timeout | null = null;
 
 const csharpService = new CSharpAnalysisService(
-    path.join(__dirname, '../../ds-service/DSService.exe'),
+    getBackendPath(),
     connection,
     documents,
     1000, // restartDelayMs

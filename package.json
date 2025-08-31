@@ -1,6 +1,7 @@
 {
-  "name": "dialoguescripter",
-  "displayName": "DialogueScripter",
+  "name": "ds-scripts-support",
+  "displayName": "DS Scripts Support",
+  "publisher": "majulizi",
   "description": "",
   "version": "0.0.1",
   "engines": {
@@ -10,6 +11,19 @@
     "Programming Languages"
   ],
   "main": "./out/lsp/extension.js",
+  "files": [
+    "ds-service",
+    "images",
+    "lsp",
+    "out",
+    "syntaxes",
+    "themes",
+    "CHANGELOG.md",
+    "language-configuration.json",
+    "packge.json",
+    "README.md",
+    "package-lock.json"
+  ],
   "contributes": {
     "languages": [
       {
@@ -54,6 +68,10 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "build-server": "cd DSService && dotnet publish -c Release -o ../ds-service"
+    "build-server": "cd DSService && dotnet publish -c Release -o ../ds-service/win-x64",
+    "build-win-x64": "cd DSService && dotnet publish -c Release -r win-x64 -o ../ds-service/win-x64",
+    "build-linux-x64": "cd DSService && dotnet publish -c Release -r linux-x64 -o ../ds-service/linux-x64",
+    "build-osx-x64": "cd DSService && dotnet publish -c Release -r osx-x64 -o ../ds-service/osx-x64",
+    "build-osx-arm64": "cd DSService && dotnet publish -c Release -r osx-arm64 -o ../ds-service/osx-arm64"
   }
 }

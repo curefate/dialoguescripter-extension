@@ -1,3 +1,4 @@
+# Use # to comment
 label start:
 me "Hello!" @happy
 "This is a test script!"
@@ -16,9 +17,9 @@ $hello = "Hello"
 "Let's tour to next label and check these variables!"
 tour B
     "Good Bye!" @sad
-jump Casdf
 
 label B:
+$b = 1
 "Aloha~ here is label B, let's use some functions!"
-"{$A.hello}! Don't {"forget"} you can embed function in dialogue! Like this! {call Add($a, $b)}"
+"{$A.hello}! Don't {"forget"} you can embed function in dialogue! Like this! {call Add($A.a, $b)}"
 call Print($A.hello)

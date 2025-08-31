@@ -13,11 +13,29 @@ const node_1 = require("vscode-languageserver/node");
 const vscode_languageserver_textdocument_1 = require("vscode-languageserver-textdocument");
 const csharp_service_1 = require("./csharp-service");
 const path = require("path");
+function getBackendPath() {
+    const base = path.join(__dirname, "../../ds-service");
+    if (process.platform === "win32") {
+        return path.join(base, "win-x64", "DSService.exe");
+    }
+    else if (process.platform === "linux") {
+        return path.join(base, "linux-x64", "DSService");
+    }
+    else if (process.platform === "darwin") {
+        if (process.arch === "arm64") {
+            return path.join(base, "osx-arm64", "DSService");
+        }
+        else {
+            return path.join(base, "osx-x64", "DSService");
+        }
+    }
+    throw new Error(`Unsupported platform: ${process.platform} ${process.arch}`);
+}
 const connection = (0, node_1.createConnection)(node_1.ProposedFeatures.all);
 const documents = new node_1.TextDocuments(vscode_languageserver_textdocument_1.TextDocument);
 const ANALYSIS_DEBOUNCE_MS = 500;
 let timer = null;
-const csharpService = new csharp_service_1.CSharpAnalysisService(path.join(__dirname, '../../ds-service/DSService.exe'), connection, documents, 1000, // restartDelayMs
+const csharpService = new csharp_service_1.CSharpAnalysisService(getBackendPath(), connection, documents, 1000, // restartDelayMs
 10000 // requestTimeoutMs
 );
 connection.onInitialize((params) => {
