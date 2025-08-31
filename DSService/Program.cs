@@ -75,34 +75,45 @@ class Program
 
                             Console.Error.WriteLine($"[DS C#] Analyzing file: {filePath}({code.Length} chars)");
 
-                            var result = AnalyzeCode(code + " \n", filePath);
+                            var result = AnalyzeCode(code, filePath);
                             Console.WriteLine(JsonSerializer.Serialize(result));
                             break;
                         }
                     case "definition":
                         {
-                            /* var filePath = root.GetProperty("filePath").GetString();
+                            var filePath = root.GetProperty("filePath").GetString();
                             var pos = root.GetProperty("position");
                             var line = pos.GetProperty("line").GetInt32();
                             var col = pos.GetProperty("character").GetInt32();
 
                             if (filePath == null) break;
-                            var v = _globalVisitor;
-                            var def = FindDefinition(v, line, col, out var fOut, filePath);
+                            var def = FindDefinition(line, col);
+                            var code = GetCode(filePath);
+                            AnalyzeCode(code, filePath);
+                            Console.Error.WriteLine($"[DS C#] Finding definition: ln{line} col{col}");
                             if (def.HasValue)
                             {
-                                var (dl, dc, dlens) = def.Value;
-                                Console.WriteLine(JsonSerializer.Serialize(new
+                                var position = new Position()
                                 {
-                                    filePath = fOut,
-                                    start = new { line = dl, character = dc },
-                                    end = new { line = dl, character = dc + dlens }
+                                    FilePath = def.Value.file,
+                                    StartLine = def.Value.line,
+                                    StartColumn = def.Value.col,
+                                    EndLine = def.Value.line,
+                                    EndColumn = def.Value.col + def.Value.length,
+                                };
+                                Console.WriteLine(JsonSerializer.Serialize(new Result
+                                {
+                                    Type = "DefinitionResult",
+                                    Positions = [position]
                                 }));
                             }
                             else
                             {
-                                Console.WriteLine(JsonSerializer.Serialize(new { filePath = "", start = (object?)null, end = (object?)null }));
-                            } */
+                                Console.WriteLine(JsonSerializer.Serialize(new Result
+                                {
+                                    Type = "DefinitionResult",
+                                }));
+                            }
                             break;
                         }
                 }
@@ -117,33 +128,30 @@ class Program
         }
     }
 
-    /* static bool InRange((int line, int col, int length) r, int line, int col)
+    static bool InRange((string file, int line, int col, int length) r, int line, int col)
     => r.line == line && col >= r.col && col <= r.col + r.length;
 
-    static (int line, int col, int length)? FindDefinition(VisitorChecker v, int line, int col, out string filePathOut, string filePath)
+    static (string file, int line, int col, int length)? FindDefinition(int line, int col)
     {
-        filePathOut = filePath;
-        // 1) 先看是否点在 label 引用上
-        foreach (var kv in v.ReferencedLabelPositions)
-            foreach (var r in kv.Value)
-                if (InRange(r, line, col) && v.DefinedLabelPositions.TryGetValue(kv.Key, out var def))
-                    return def;
-        // 2) 点在变量引用上
-        foreach (var kv in v.ReferencedVariablePositions)
-            foreach (var r in kv.Value)
-                if (InRange(r, line, col) && v.DefinedVariablePositions.TryGetValue(kv.Key, out var def))
-                    return def;
-        // 3) 点到了定义本身，也允许跳到自己
-        foreach (var kv in v.DefinedLabelPositions)
-            if (InRange(kv.Value, line, col)) return kv.Value;
-
-        foreach (var kv in v.DefinedVariablePositions)
-            if (InRange(kv.Value, line, col)) return kv.Value;
+        foreach (var kv in _globalVisitor.ReferencedLabels)
+            foreach (var pos in kv.Value)
+                if (InRange(pos, line, col) && _globalVisitor.DefinedLabels.ContainsKey(kv.Key) && _globalVisitor.DefinedLabels[kv.Key].Count == 1)
+                    return _globalVisitor.DefinedLabels[kv.Key][0];
+        foreach (var kv in _globalVisitor.ReferencedVariables)
+            foreach (var pos in kv.Value)
+                if (InRange(pos, line, col) && _globalVisitor.DefinedVariables.ContainsKey(kv.Key) && _globalVisitor.DefinedVariables[kv.Key].Count == 1)
+                    return _globalVisitor.DefinedVariables[kv.Key][0];
+        foreach (var kv in _globalVisitor.DefinedLabels)
+            if (_globalVisitor.DefinedLabels.ContainsKey(kv.Key) && _globalVisitor.DefinedLabels[kv.Key].Count == 1 && InRange(_globalVisitor.DefinedLabels[kv.Key][0], line, col))
+                return _globalVisitor.DefinedLabels[kv.Key][0];
+        foreach (var kv in _globalVisitor.DefinedVariables)
+            if (_globalVisitor.DefinedVariables.ContainsKey(kv.Key) && _globalVisitor.DefinedVariables[kv.Key].Count == 1 && InRange(_globalVisitor.DefinedVariables[kv.Key][0], line, col))
+                return _globalVisitor.DefinedVariables[kv.Key][0];
 
         return null;
-    } */
+    }
 
-    static AnalysisResult AnalyzeCode(string code, string filePath)
+    static Result AnalyzeCode(string code, string filePath)
     {
         var inputStream = new AntlrInputStream(code)
         {
@@ -169,11 +177,13 @@ class Program
             {
                 foreach (var pos in kv.Value)
                 {
+                    if (pos.file != filePath) continue;
                     diagList.Add(new Diagnostic
                     {
                         Line = pos.line,
                         Column = pos.col,
-                        Message = $"Label '{kv.Key}' is already defined."
+                        Message = $"Label '{kv.Key}' is already defined.",
+                        Severity = 1
                     });
                 }
             }
@@ -185,27 +195,46 @@ class Program
             {
                 foreach (var pos in kv.Value)
                 {
+                    if (pos.file != filePath) continue;
                     diagList.Add(new Diagnostic
                     {
                         Line = pos.line,
                         Column = pos.col,
-                        Message = $"Undefined label '{kv.Key}'."
+                        Message = $"Undefined label '{kv.Key}'.",
+                        Severity = 1
                     });
                 }
             }
         }
-        // 检查变量重复定义
+        // 检查变量重复定义，及其作用域label是否存在
         foreach (var kv in visitor.DefinedVariables)
         {
             if (kv.Value.Count > 1)
             {
                 foreach (var pos in kv.Value)
                 {
+                    if (pos.file != filePath) continue;
                     diagList.Add(new Diagnostic
                     {
                         Line = pos.line,
                         Column = pos.col,
-                        Message = $"Variable '{kv.Key}' is already defined."
+                        Message = $"Variable '{kv.Key}' is already defined.",
+                        Severity = 1
+                    });
+                }
+            }
+            var field = kv.Key.Split('.')[0][1..];
+            if (!visitor.DefinedLabels.ContainsKey(field))
+            {
+                foreach (var pos in kv.Value)
+                {
+                    if (pos.file != filePath) continue;
+                    diagList.Add(new Diagnostic
+                    {
+                        Line = pos.line,
+                        Column = pos.col,
+                        Message = $"Label '{field}' for variable '{kv.Key}' is not defined.",
+                        Severity = 1
                     });
                 }
             }
@@ -217,18 +246,21 @@ class Program
             {
                 foreach (var pos in kv.Value)
                 {
+                    if (pos.file != filePath) continue;
                     diagList.Add(new Diagnostic
                     {
                         Line = pos.line,
                         Column = pos.col,
-                        Message = $"Undefined variable '{kv.Key}'."
+                        Message = $"Undefined variable '{kv.Key}'.",
+                        Severity = 1
                     });
                 }
             }
         }
 
-        return new AnalysisResult
+        return new Result
         {
+            Type = "AnalyzeResult",
             Diagnostics = [.. diagList]
         };
     }
@@ -246,17 +278,18 @@ internal class DSErrorListener : BaseErrorListener
         {
             Line = line - 1,
             Column = charPositionInLine,
-            Message = msg
+            Message = msg,
+            Severity = 1
         });
     }
 }
 
 internal class VisitorChecker : DSParserBaseVisitor<object>
 {
-    public Dictionary<string, List<(int line, int col, int length)>> DefinedLabels = [];
-    public Dictionary<string, List<(int line, int col, int length)>> ReferencedLabels = [];
-    public Dictionary<string, List<(int line, int col, int length)>> DefinedVariables = [];
-    public Dictionary<string, List<(int line, int col, int length)>> ReferencedVariables = [];
+    public Dictionary<string, List<(string file, int line, int col, int length)>> DefinedLabels = [];
+    public Dictionary<string, List<(string file, int line, int col, int length)>> ReferencedLabels = [];
+    public Dictionary<string, List<(string file, int line, int col, int length)>> DefinedVariables = [];
+    public Dictionary<string, List<(string file, int line, int col, int length)>> ReferencedVariables = [];
     public List<Diagnostic> AdditionDiags = [];
     private string _currentLabel = string.Empty;
 
@@ -285,7 +318,8 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
             {
                 Line = context.Start.Line - 1,
                 Column = context.path.Column,
-                Message = $"Import file '{path}' is not a .ds file."
+                Message = $"Import file '{path}' is not a .ds file.",
+                Severity = 1
             });
             return base.VisitImport_stmt(context);
         }
@@ -295,7 +329,8 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
             {
                 Line = context.Start.Line - 1,
                 Column = context.path.Column,
-                Message = $"Import file '{path}' not found."
+                Message = $"Import file '{path}' not found.",
+                Severity = 1
             });
             return base.VisitImport_stmt(context);
         }
@@ -320,6 +355,7 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
         var label = context.label.Text;
         DefinedLabels.TryAdd(label, []);
         DefinedLabels[label].Add((
+            context.Start.TokenSource.SourceName,
             context.Start.Line - 1,
             context.label.Column,
             label.Length
@@ -333,6 +369,7 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
         var label = context.label.Text;
         ReferencedLabels.TryAdd(label, []);
         ReferencedLabels[label].Add((
+            context.Start.TokenSource.SourceName,
             context.Start.Line - 1,
             context.label.Column,
             label.Length
@@ -345,6 +382,7 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
         var label = context.label.Text;
         ReferencedLabels.TryAdd(label, []);
         ReferencedLabels[label].Add((
+            context.Start.TokenSource.SourceName,
             context.Start.Line - 1,
             context.label.Column,
             label.Length
@@ -362,6 +400,7 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
         }
         DefinedVariables.TryAdd(varName, []);
         DefinedVariables[varName].Add((
+            context.Start.TokenSource.SourceName,
             context.Start.Line - 1,
             context.VARIABLE().Symbol.Column,
             raw.Length
@@ -381,6 +420,7 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
             }
             ReferencedVariables.TryAdd(varName, []);
             ReferencedVariables[varName].Add((
+                context.Start.TokenSource.SourceName,
                 context.Start.Line - 1,
                 context.VARIABLE().Symbol.Column,
                 raw.Length
@@ -390,9 +430,20 @@ internal class VisitorChecker : DSParserBaseVisitor<object>
     }
 }
 
-public class AnalysisResult
+public class Result
 {
+    public string Type { get; set; }
     public Diagnostic[] Diagnostics { get; set; }
+    public Position[] Positions { get; set; }
+}
+
+public class Position
+{
+    public string FilePath { get; set; }
+    public int StartLine { get; set; }
+    public int StartColumn { get; set; }
+    public int EndLine { get; set; }
+    public int EndColumn { get; set; }
 }
 
 public class Diagnostic
@@ -400,4 +451,5 @@ public class Diagnostic
     public int Line { get; set; }
     public int Column { get; set; }
     public string Message { get; set; }
+    public int Severity { get; set; } = 1; // 1=Error, 2=Warning, 3=Info, 4=Hint
 }

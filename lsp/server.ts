@@ -39,29 +39,25 @@ connection.onInitialize((params: InitializeParams) => {
     };
 });
 
-/* connection.onDefinition(async (params) => {
+
+connection.onDefinition(async (params) => {
     const uri = params.textDocument.uri;
     const doc = documents.get(uri);
     if (!doc) return null;
 
-    const filePath = URI.parse(uri).fsPath;
+    try {
+        const res = await csharpService.getDefinition({
+            document: doc,
+            position: params.position,
+        });
 
-    const res = await csharpService.getDefinition({
-        filePath,
-        position: params.position
-    });
+        if (!res) return null;
+        return res;
+    } catch (err) {
+        return null;
+    }
+});
 
-    if (!res || !res.start || !res.end || !res.filePath) return null;
-
-    const targetUri = URI.file(res.filePath).toString();
-    return Location.create(
-        targetUri,
-        Range.create(
-            Position.create(res.start.line, res.start.character),
-            Position.create(res.end.line, res.end.character)
-        )
-    );
-}); */
 
 documents.onDidChangeContent((change) => {
     csharpService.onUpdate(change.document);

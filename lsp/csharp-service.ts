@@ -1,14 +1,16 @@
 import { ChildProcess, spawn } from 'child_process';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Diagnostic, Connection } from 'vscode-languageserver';
+import { Diagnostic, Connection, Location, Range, Position } from 'vscode-languageserver';
 import { URI } from 'vscode-uri';
 import { json } from 'stream/consumers';
+
 
 export class CSharpAnalysisService {
     private process: ChildProcess | null = null;
     private restartAttempts = 0;
     private readonly maxRestartAttempts = 5;
-    private activeRequests: Map<string, { resolve: (diags: Diagnostic[]) => void, reject: (err: Error) => void }> = new Map();
+    private analyzeRequests: Map<string, { resolve: (diags: Diagnostic[]) => void, reject: (err: Error) => void }> = new Map();
+    private definitionRequests: Map<string, { resolve: (loc: Location | null) => void, reject: (err: Error) => void }> = new Map();
     private buffer = '';
 
     constructor(
@@ -45,7 +47,31 @@ export class CSharpAnalysisService {
                             this.connection.console.error(`[DS] Analysis error: ${result.Error}`);
                             this.clearRequests(new Error(result.Error));
                         } else {
-                            this.resolveRequests(this.mapDiagnostics(result.Diagnostics));
+                            switch (result.Type) {
+                                case 'AnalyzeResult':
+                                    const diags = this.mapDiagnostics(result.Diagnostics || []);
+                                    this.resolveAnalyzeRequests(diags);
+                                    break;
+                                case 'DefinitionResult':
+                                    const positions = result.Positions;
+                                    if (Array.isArray(positions) && positions.length > 0) {
+                                        const pos = positions[0];
+                                        const location = Location.create(
+                                            URI.file(pos.FilePath).toString(),
+                                            Range.create(
+                                                Position.create(pos.StartLine, pos.StartColumn),
+                                                Position.create(pos.EndLine, pos.EndColumn)
+                                            )
+                                        );
+                                        this.resolveDefinitionRequests(location);
+                                    } else {
+                                        this.resolveDefinitionRequests(null);
+                                    }
+                                    break;
+                                default:
+                                    this.connection.console.error(`[DS] Unknown result type: ${result.Type}`);
+                                    break;
+                            }
                         }
                     } catch (err) {
                         this.connection.console.error(`[DS] JSON parse error: ${err}, data: ${line}`);
@@ -65,14 +91,21 @@ export class CSharpAnalysisService {
         });
     }
 
-    private resolveRequests(diagnostics: Diagnostic[]): void {
-        this.activeRequests.forEach(({ resolve }) => resolve(diagnostics));
-        this.activeRequests.clear();
+    private resolveAnalyzeRequests(diagnostics: Diagnostic[]): void {
+        this.analyzeRequests.forEach(({ resolve }) => resolve(diagnostics));
+        this.analyzeRequests.clear();
+    }
+
+    private resolveDefinitionRequests(location: Location | null): void {
+        this.definitionRequests.forEach(({ resolve }) => resolve(location));
+        this.definitionRequests.clear();
     }
 
     private clearRequests(error: Error): void {
-        this.activeRequests.forEach(({ reject }) => reject(error));
-        this.activeRequests.clear();
+        this.analyzeRequests.forEach(({ reject }) => reject(error));
+        this.analyzeRequests.clear();
+        this.definitionRequests.forEach(({ reject }) => reject(error));
+        this.definitionRequests.clear();
     }
 
     private scheduleRestart(): void {
@@ -94,11 +127,11 @@ export class CSharpAnalysisService {
 
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-                this.activeRequests.delete(requestId);
+                this.analyzeRequests.delete(requestId);
                 reject(new Error('Analysis timeout'));
             }, this.requestTimeoutMs);
 
-            this.activeRequests.set(requestId, {
+            this.analyzeRequests.set(requestId, {
                 resolve: (diags) => {
                     clearTimeout(timeout);
                     resolve(diags);
@@ -118,7 +151,7 @@ export class CSharpAnalysisService {
 
             this.process?.stdin?.write(JSON.stringify(payload) + '\n', (err) => {
                 if (err) {
-                    this.activeRequests.delete(requestId);
+                    this.analyzeRequests.delete(requestId);
                     reject(err);
                 }
             });
@@ -133,7 +166,7 @@ export class CSharpAnalysisService {
             },
             message: d.Message || 'unknown error',
             source: 'ds',
-            severity: 1
+            severity: d.Severity || 1
         }));
     }
 
@@ -178,5 +211,42 @@ export class CSharpAnalysisService {
                 this.connection.console.error(`[DS] Failed to send close file: ${err}`);
             }
         });
+    }
+
+    public async getDefinition(params: { document: TextDocument, position: { line: number, character: number } }): Promise<Location | null> {
+        const requestId = Date.now().toString();
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                this.definitionRequests.delete(requestId);
+                reject(new Error('Definition timeout'));
+            }, this.requestTimeoutMs);
+
+            this.definitionRequests.set(requestId, {
+                resolve: (loc) => {
+                    clearTimeout(timeout);
+                    resolve(loc);
+                },
+                reject: (err) => {
+                    clearTimeout(timeout);
+                    reject(err);
+                }
+            });
+
+            const filePath = URI.parse(params.document.uri).fsPath;
+            const payload = {
+                type: 'definition',
+                id: requestId,
+                filePath,
+                position: params.position
+            };
+
+            this.process?.stdin?.write(JSON.stringify(payload) + '\n', (err) => {
+                if (err) {
+                    this.definitionRequests.delete(requestId);
+                    reject(err);
+                }
+            });
+        });
+
     }
 }
