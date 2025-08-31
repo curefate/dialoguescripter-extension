@@ -2,6 +2,7 @@
   "name": "ds-scripts-support",
   "displayName": "DS Scripts Support",
   "publisher": "majulizi",
+  "icon": "images/icon.png",
   "description": "",
   "version": "0.0.1",
   "engines": {
