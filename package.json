@@ -2,7 +2,7 @@
   "name": "ds-scripts-support",
   "displayName": "DS Scripts Support",
   "publisher": "majulizi",
-  "icon": "images/icon.png",
+  "icon": "icon.png",
   "description": "",
   "version": "0.0.1",
   "engines": {
@@ -11,20 +11,11 @@
   "categories": [
     "Programming Languages"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/curefate/dialoguescripter-extension"
+  },
   "main": "./out/lsp/extension.js",
-  "files": [
-    "ds-service",
-    "images",
-    "lsp",
-    "out",
-    "syntaxes",
-    "themes",
-    "CHANGELOG.md",
-    "language-configuration.json",
-    "packge.json",
-    "README.md",
-    "package-lock.json"
-  ],
   "contributes": {
     "languages": [
       {

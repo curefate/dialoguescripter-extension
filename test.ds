@@ -23,3 +23,5 @@ $b = 1
 "Aloha~ here is label B, let's use some functions!"
 "{$A.hello}! Don't {"forget"} you can embed function in dialogue! Like this! {call Add($A.a, $b)}"
 call Print($A.hello)
+okk
+wocaonide

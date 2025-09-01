@@ -5,7 +5,7 @@ This is an extension that adds many support functions for [DS](https://github.co
 Feel free to [contribute](https://github.com/curefate/dialoguescripter-extension), thanks for any feedback. ;D
 
 ## Features
-### Syntax Highlighting
+### Syntax Highlighting (with a nice theme!)
 ![](images/1.gif)
 ### Error Check
 ![](images/2.gif)
